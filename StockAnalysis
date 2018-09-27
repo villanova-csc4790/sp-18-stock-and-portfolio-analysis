@@ -1,0 +1,78 @@
+import datetime as dt
+import matplotlib.pyplot as plt
+import mpl_finance
+from matplotlib import style
+from mpl_finance import candlestick_ohlc
+import matplotlib.dates as mdates
+import pandas as pd
+import pandas_datareader.data as web
+import csv
+import numpy as np
+
+style.use('ggplot')
+
+start = dt.datetime(2015, 1, 1)
+end = dt.datetime.now()
+df = web.DataReader("TSLA", 'iex', start, end)
+df.to_csv('tsla.csv')
+
+df = pd.read_csv('tsla.csv', parse_dates=True, index_col=0)
+tsla = df
+df['100ma'] = df['close'].rolling(window=100, min_periods=0).mean()
+df['50ma'] = df['close'].rolling(window=50, min_periods=0).mean()
+df['200ma'] = df['close'].rolling(window=200, min_periods=0).mean()
+df['20ma'] = df['close'].rolling(window=20, min_periods=0).mean()
+
+
+df.dropna(inplace=True)
+
+print(df.head())
+
+df_ohlc = df['close'].resample('10D').ohlc()
+df_volume = df['volume'].resample('10D').sum()
+
+df_ohlc.reset_index(inplace=True)
+df_ohlc['date']=df_ohlc['date'].map(mdates.date2num)
+print(df_ohlc.head())
+
+
+
+
+ax1 = plt.subplot2grid((6,1), (0,0), rowspan=5, colspan=1)
+ax2 = plt.subplot2grid((6,1), (5,0), rowspan=1, colspan=1, sharex=ax1)
+ax1.xaxis_date()
+#ax2.legend()
+
+candlestick_ohlc(ax1, df_ohlc.values, width=2, colorup='g')
+ax2.fill_between(df_volume.index.map(mdates.date2num), df_volume.values, 0)
+
+#ax1.plot(df.index, df['close'])
+ax1.plot(df.index, df['100ma'], color="blue", label='100d')
+ax1.plot(df.index, df['50ma'], color="black", label='50d')
+ax1.plot(df.index, df['200ma'], color="yellow", label='200d')
+
+
+
+#ax2.plot(df.index, df['volume'])
+
+plt.show()
+
+tsla['20d-50d'] = df['20ma'] - df['50ma']
+print(tsla.tail())
+tsla["Regime"] = np.where(tsla['20d-50d'] > 0, 1, 0)
+tsla["Regime"] = np.where(tsla['20d-50d'] < 0, -1, tsla["Regime"])
+tsla.loc['2016-01-04' : '2016-12-31', "Regime"].plot(ylim = (-2,2)).axhline(y = 0, color = "black", lw = 2)
+plt.show()
+print(tsla["Regime"].value_counts())
+
+# To ensure that all trades close out, temporarily change the regime of the last row to 0
+##regime_orig = tsla.ix[-1, "Regime"]
+##tsla.ix[-1, "Regime"] = 0
+
+##tsla["Signal"] = (tsla["Regime"] - tsla["Regime"].shift(1))
+# Restore original regime data
+#tsla.ix[-1, "Regime"] = regime_orig
+#print(tsla())
+
+##df['close'].plot()
+##plt.show()
